@@ -2,8 +2,6 @@ from typing import Any
 import pygame
 import sys
 
-
-
 pygame.init()
 
 clock = pygame.time.Clock()
@@ -94,27 +92,39 @@ class Player(pygame.sprite.Sprite):
         self.vel = 0
         self.points = 0
         self.on_platform = False
+        
         self.platform_vel = 0
-    def update(self,platforms) -> None:
+    def update(self,platforms,double_jump_points) -> None:
         cooldown = 6
         self.counter+=1
         global walking
         global double_jump
+        print(double_jump)
         global on_the_ground
-        for platform in platforms:
-            if self.rect.colliderect(platform.rect):
-                if self.rect.top == platform.rect.bottom:
-                    # Player hit the head, start falling
-                    self.rect.y += 25  # Adjust the player's position slightly
-                    on_the_ground = False
+        
 
+        for point in double_jump_points:
+            if self.rect.colliderect(point.rect):
+                
+                double_jump = True
+                break
+                
+            else:
+                double_jump = False
+                
+
+        for platform in platforms:
+            
+            
+            if self.rect.colliderect(platform.rect):
+                
                 on_the_ground = True
                 self.vel = 0
                 self.rect.y = platform.rect.y - self.rect.height
                 self.on_platform = True
                 self.platform_vel = platform.platform_vel
-
                 break
+                
             else:
                 self.on_platform = False
         
@@ -129,13 +139,13 @@ class Player(pygame.sprite.Sprite):
             self.rect.x += player_speed
             walking=True
             self.direction=1
-            
+        
         if keys[pygame.K_SPACE] and (on_the_ground or double_jump):
             jump_height =13 if (on_the_ground==True or self.on_platform ==True) else 20
-            on_the_ground = False
-            double_jump = False
             self.vel =-(jump_height)
-        
+            on_the_ground = False
+            
+            
         if keys[pygame.K_LEFT] == False and keys[pygame.K_RIGHT] == False:
             walking=False
             
@@ -193,7 +203,7 @@ class Double_jump_object(pygame.sprite.Sprite):
             self.rect = self.image.get_rect()
             self.rect.center = [x, y]
             
-    def update(self,target):
+    def update(self):
             global double_jump
             self.counter += 1
             cooldown = 5
@@ -204,10 +214,6 @@ class Double_jump_object(pygame.sprite.Sprite):
                     self.index = 0
             self.image = self.images[self.index]
 
-            if self.rect.colliderect(target.rect): 
-                double_jump = True
-            if not self.rect.colliderect(target.rect): 
-                double_jump = False
 
 class Platform(pygame.sprite.Sprite):
      def __init__(self, x,y) -> None:
@@ -221,31 +227,61 @@ class Platform(pygame.sprite.Sprite):
      def move(self):
           self.image = self.image
           self.rect.x -= self.platform_vel
-          if self.rect.right < 0:
-            self.rect.x = width
-               
+          if self.rect.left <= 0 or self.rect.right>=width:
+            self.platform_vel*=-1
+class Exit(pygame.sprite.Sprite):
+    def __init__(self, x, y) -> None:
+            pygame.sprite.Sprite.__init__(self)
+            self.images = []
+            self.index = 0
+            self.counter = 0
+            for num in range(1, 7):
+                img = pygame.image.load(f'img/portal{num}.png')
+                self.images.append(img)
+            self.image = self.images[self.index]
+            self.rect = self.image.get_rect()
+            self.rect.center = [x, y]
+            
+    def update(self,target):
+            global game_over
+            global double_jump
+            self.counter += 1
+            cooldown = 6
+            if self.counter > cooldown:
+                self.counter = 0
+                self.index += 1
+                if self.index >= len(self.images):
+                    self.index = 0
+            self.image = self.images[self.index]
 
+            if self.rect.colliderect(target.rect):
+                game_over=True
+    def draw(self,screen):
+        screen.blit(self.image, self.rect.topleft)
 background=pygame.image.load('img/bg3.png')
 ground = pygame.image.load('img/ground.png')
 
 #Group objects
 player_group = pygame.sprite.Group()
-double_jump_group = pygame.sprite.Group()
 player = Player(200, int(height/2))
 player_group.add(player)
-double_jump_poit_1= Double_jump_object(int((width+200)/2), int(height/1.2)+10)
-double_jump_poit_2= Double_jump_object(int((width)), int(height/2))
-double_jump_group.add(double_jump_poit_1)
-double_jump_group.add(double_jump_poit_2)
+
+double_jump_group = pygame.sprite.Group()
+double_jump_poit_1= Double_jump_object(290,400)
+double_jump_poit_2= Double_jump_object(int((width-100)), 493)
+double_jump_poit_3 = Double_jump_object(width-50,200)
+double_jump_group.add(double_jump_poit_2,double_jump_poit_1,double_jump_poit_3)
+
 coins_group = pygame.sprite.Group()
 coin1 = coin(250,300)
-coins_group.add(coin1)
 coin2 = coin(350 ,325)
-coins_group.add(coin2)
+coin3 = coin(150 ,350)
+coins_group.add(coin2,coin1,coin3)
+
 platform_group = pygame.sprite.Group()
-platform1 = Platform(400, 500)
-platform2 = Platform(600, 400)
-platform_group.add(platform1, platform2)
+platform1 = Platform(400, 220)
+
+platform_group.add(platform1)
 #Animation, coin, levels, moving platform 
 text_col = (255, 255, 255)
 text = "COINS: "
@@ -254,23 +290,31 @@ font = pygame.font.Font('font/Grand9K Pixel.ttf',16)
 main_music = pygame.mixer.Sound('sound/main_sound.mp3')
 main_music.play(-1)
 
+exit_portal = Exit(width-50,50)
+
 while True:
+    
     clock.tick(fps)
     
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
+    if game_over==True:
+        break
     # Move platforms
     for platform in platform_group:
         platform.move()
+    
 
     screen.blit(background, (0,0))
     # Update
-    player_group.update(platform_group)
-    double_jump_group.update(player)
+    player_group.update(platform_group,double_jump_group)
+    for point in double_jump_group:
+        point.update()
     coins_group.update(player)
-    
+    exit_portal.update(player)
+
     # Draw
     draw_text(text+str(player.points),font,text_col,20,20)
     # Screen
@@ -285,4 +329,5 @@ while True:
     double_jump_group.draw(screen)
     #end_point
     coins_group.draw(screen)
+    exit_portal.draw(screen)
     pygame.display.update()
